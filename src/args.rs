@@ -12,10 +12,6 @@ pub struct HookArgs {
     #[arg(short, long)]
     pub destination: String,
 
-    /// Create a symlink to all files in subdirectories.
-    #[arg(short, long)]
-    pub recursive: bool,
-
     /// Move files from the destination path to the source path and overwrite if they exist in the source directory.
     #[arg(short, long)]
     pub force: bool,

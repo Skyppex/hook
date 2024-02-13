@@ -6,6 +6,9 @@ pub enum HookError {
     ExecutionError(String),
     SymlinkCreationError(std::io::Error),
     Skipping(String),
+    FilesAlreadyExists,
+    DifferentNames,
+    CancelledByUser,
 }
 
 impl Display for HookError {
@@ -14,6 +17,9 @@ impl Display for HookError {
             HookError::ExecutionError(message) => write!(f, "Execution error: {}", message),
             HookError::SymlinkCreationError(message) => write!(f, "Symlink creation error: {}", message),
             HookError::Skipping(message) => write!(f, "Skipping: {}", message),
+            HookError::FilesAlreadyExists => write!(f, "The source and destination paths already have files and the force flag is not set."),
+            HookError::DifferentNames => write!(f, "The source and destination paths have different names."),
+            HookError::CancelledByUser => write!(f, "The operation was cancelled by the user."),
         }
     }
 }
