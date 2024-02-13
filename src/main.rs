@@ -1,23 +1,12 @@
+use clap::Parser;
 use std::path::Path;
-use error::HookError;
 use symlink::symlink_auto;
 
 use args::HookArgs;
-use clap::Parser;
+use error::HookError;
 
 mod args;
 mod error;
-
-// Rules:
-// A symlink should no be created if the file already is a symlink in the destination path.
-// A symlink should be created at the destination path if there are no files there, but there are files at the source path.
-// A symlink should be created at the destination path if there are files there, there are no files at the source path.
-//     This will move files.
-// A symlink should be created at the destination path if there are files there, there are files at the source path.
-//     This will error unless the force flag is set.
-// If the source path is a file, the destination path should be a file.
-// If the source path is a directory, the destination path should be a directory.
-//     This will create a symlink directory.
 
 fn main() {
     let result = run_program();
@@ -57,14 +46,7 @@ fn run_program() -> Result<(), HookError> {
     Ok(())
 }
 
-// A symlink should not be created if the file already is a symlink in the destination path.
-// A symlink should be created at the destination path if there are no files there, but there are files at the source path.
-// A symlink should be created at the destination path if there are files there and there are no files at the source path.
-//     This will move files.
-// A symlink should be created at the destination path if there are files there, there are files at the source path.
-//     This will error unless the force flag is set.
 fn create_symlink_file(source: &Path, destination: &Path, force: bool) -> Result<(), HookError> {
-    // A symlink should not be created if the file already is a symlink in the destination path.
     if destination.is_symlink() {
         return Err(HookError::Skipping("The destination path is already a symlink.".to_string()));
     }
@@ -73,24 +55,21 @@ fn create_symlink_file(source: &Path, destination: &Path, force: bool) -> Result
     assert!(destination.extension().is_some());
 
     match (destination.exists(), source.exists()) {
-        // A symlink should be created at the destination path if there isn't a file there, but there is a file at the source path.
         (false, true) => {
             create_symlink(source, destination)
         },
-        // A symlink should be created at the destination path if there is a file there and there isn't a file at the source path.
-        //     This will move the file.
         (true, false) => {
             move_file(destination, source)?;
             create_symlink(source, destination)
         },
-        // A symlink should be created at the destination path if there is a file there and there is a file at the source path.
-        //     This will error unless the force flag is set.
         (true, true) => {
             if !force {
                 return Err(HookError::FilesAlreadyExists);
             }
 
             println!("The source and destination paths both exist.");
+            println!("Source: {}", source.display());
+            println!("Destination: {}", destination.display());
             println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
 
             let mut input = String::new();
@@ -126,40 +105,44 @@ fn create_symlink_file(source: &Path, destination: &Path, force: bool) -> Result
             create_symlink(source, destination)
         },
         (false, false) => {
-            // This should never happen.
-            return Err(HookError::ExecutionError("The source and destination paths do not exist.".to_string()));
+            create_file(source)?;
+            create_symlink(source, destination)
         },
     }
 }
 
 fn create_symlink_directory(source: &Path, destination: &Path, force: bool) -> Result<(), HookError> {
-    // A symlink should not be created if the file already is a symlink in the destination path.
     if destination.is_symlink() {
         return Err(HookError::Skipping("The destination path is already a symlink.".to_string()));
     }
 
-    assert!(source.is_dir());
-    assert!(destination.is_dir());
+    assert!(source.extension().is_none());
+    assert!(destination.extension().is_none());
 
     match (destination.exists(), source.exists()) {
-        // A symlink should be created at the destination path if there isn't a file there, but there is a file at the source path.
         (false, true) => {
             create_symlink(source, destination)
         },
-        // A symlink should be created at the destination path if there is a file there and there isn't a file at the source path.
-        //     This will move the file.
         (true, false) => {
-            move_file(destination, source)?;
+            move_directory(destination, source)?;
             create_symlink(source, destination)
         },
-        // A symlink should be created at the destination path if there is a file there and there is a file at the source path.
-        //     This will error unless the force flag is set.
         (true, true) => {
+            if is_dir_empty(destination) {
+                remove_directory(destination)?;
+                return create_symlink_directory(source, destination, force);
+            } else if is_dir_empty(source) {
+                remove_directory(source)?;
+                return create_symlink_directory(source, destination, force);
+            }
+
             if !force {
                 return Err(HookError::FilesAlreadyExists);
             }
 
-            println!("The source and destination paths both exist.");
+            println!("The source and destination paths both exist and have files in them.");
+            println!("Source: {}", source.display());
+            println!("Destination: {}", destination.display());
             println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
 
             let mut input = String::new();
@@ -168,12 +151,12 @@ fn create_symlink_directory(source: &Path, destination: &Path, force: bool) -> R
                     Ok(_) => {
                         match input.trim() {
                             "s" | "S" => { // Keeping source
-                                remove_file(destination)?;
+                                remove_directory(destination)?;
                                 break;
                             },
                             "d" | "D" => { // Keeping destination
-                                remove_file(source)?;
-                                move_file(destination, source)?;
+                                remove_directory(source)?;
+                                move_directory(destination, source)?;
                                 break;
                             },
                             "n" | "N" => { // Cancel
@@ -195,32 +178,71 @@ fn create_symlink_directory(source: &Path, destination: &Path, force: bool) -> R
             create_symlink(source, destination)
         },
         (false, false) => {
-            // This should never happen.
-            return Err(HookError::ExecutionError("The source and destination paths do not exist.".to_string()));
+            create_directory(source)?;
+            create_symlink(source, destination)
         },
     }
 }
 
 fn remove_file(path: &Path) -> Result<(), HookError> {
-    println!("Removing file: {:?}", path);
+    println!("Removing file: {}", path.display());
 
     std::fs::remove_file(path).map_err(|err| {
         HookError::ExecutionError(format!("Error removing file: {}", err))
     })
 }
 
+fn remove_directory(path: &Path) -> Result<(), HookError> {
+    println!("Removing directory: {}", path.display());
+
+    std::fs::remove_dir_all(path).map_err(|err| {
+        HookError::ExecutionError(format!("Error removing directory: {}", err))
+    })
+}
+
+fn create_file(path: &Path) -> Result<(), HookError> {
+    println!("Creating file: {}", path.display());
+
+    std::fs::File::create(path).map_err(|err| {
+        HookError::ExecutionError(format!("Error creating file: {}", err))
+    }).map(|_| ())
+}
+
+fn create_directory(path: &Path) -> Result<(), HookError> {
+    println!("Creating directory: {}", path.display());
+
+    std::fs::create_dir_all(path).map_err(|err| {
+        HookError::ExecutionError(format!("Error creating directory: {}", err))
+    })
+}
+
 fn move_file(from: &Path, to: &Path) -> Result<(), HookError> {
-    println!("Moving file: {:?} to {:?}", from, to);
+    println!("Moving file: {} to {}", from.display(), to.display());
 
     std::fs::rename(from, to).map_err(|err| {
         HookError::ExecutionError(format!("Error moving file: {}", err))
     })
 }
 
+fn move_directory(from: &Path, to: &Path) -> Result<(), HookError> {
+    println!("Moving directory: {} to {}", from.display(), to.display());
+
+    std::fs::rename(from, to).map_err(|err| {
+        HookError::ExecutionError(format!("Error moving directory: {}", err))
+    })
+}
+
 fn create_symlink(source: &Path, destination: &Path) -> Result<(), HookError> {
-    println!("Creating symlink: {:?} to {:?}", source, destination);
+    println!("Creating symlink: {} to {}", source.display(), destination.display());
 
     symlink_auto(source, destination).map_err(|err| {
         HookError::SymlinkCreationError(err)
     })
+}
+
+fn is_dir_empty(path: &Path) -> bool {
+    match std::fs::read_dir(path) {
+        Ok(mut dir) => dir.next().is_none(),
+        Err(_) => true,
+    }
 }
