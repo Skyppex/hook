@@ -23,9 +23,7 @@ It's recommended to add it to your PATH or copy it to a folder already in your P
 
 ## Usage
 
-```sh
-hook.exe [OPTIONS] --source <SOURCE> --destination <DESTINATION>
-```
+`hook.exe [OPTIONS] --source <SOURCE> --destination <DESTINATION>`
 
 ### Options
 - `-s`, `--source` <SOURCE>            The file path where you wish the real files to be
