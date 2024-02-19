@@ -1,1 +1,7 @@
-/target
+/target/debug
+/target/.rustc_info.json
+/target/CACHEDIR.TAG
+.idea
+
+/target/release/*
+!/target/release/hook.exe
