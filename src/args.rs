@@ -4,6 +4,7 @@ use clap::{ArgGroup, Parser};
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
 #[command(group(ArgGroup::new("overwrite").multiple(false)))]
+#[command(group(ArgGroup::new("logging").multiple(false)))]
 pub struct HookArgs {
     /// The file path where you wish the real files to be.
     #[arg(short, long, required=true)]
@@ -22,6 +23,10 @@ pub struct HookArgs {
     pub force: bool,
 
     /// Do not print any output except errors and required prompts.
-    #[arg(short, long)]
-    pub quiet: bool
+    #[arg(short, long, group="logging")]
+    pub quiet: bool,
+
+    /// Print more information about the operation.
+    #[arg(short, long, group="logging")]
+    pub verbose: bool,
 }

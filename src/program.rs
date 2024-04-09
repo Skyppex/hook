@@ -10,6 +10,10 @@ use crate::get_path;
 pub fn run() -> Result<(), HookError> {
     let args = HookArgs::parse();
 
+    if args.verbose {
+        println!("Args: {:#?}", args);
+    }
+
     let source = get_path(&args.source.replace(r"\\", r"\")).map_err(|err| {
         HookError::ExecutionError(format!("Error getting source path: {}", err))
     })?;
@@ -17,6 +21,11 @@ pub fn run() -> Result<(), HookError> {
     let destination = get_path(&args.destination.replace(r"\\", r"\")).map_err(|err| {
         HookError::ExecutionError(format!("Error getting source path: {}", err))
     })?;
+
+    if args.verbose {
+        println!("Source: {}", source.display());
+        println!("Destination: {}", destination.display());
+    }
 
     if source.file_name() != destination.file_name() {
         return Err(HookError::DifferentNames);
@@ -42,6 +51,10 @@ pub fn run() -> Result<(), HookError> {
 fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Result<(), HookError> {
     if destination.is_symlink() {
         handle_symlink_different_target(source, destination, args.clone())?;
+    }
+
+    if args.verbose {
+        println!("Trying to create symlink file: {} -> {}", source.display(), destination.display());
     }
     
     assert!(source.extension().is_some());
@@ -113,6 +126,10 @@ fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Res
 fn create_symlink_directory(source: &Path, destination: &Path, args: HookArgs) -> Result<(), HookError> {
     if destination.is_symlink() {
         handle_symlink_different_target(source, destination, args.clone())?;
+    }
+
+    if args.verbose {
+        println!("Trying to create symlink directory: {} -> {}", source.display(), destination.display());
     }
 
     assert!(source.extension().is_none());
@@ -281,40 +298,47 @@ fn handle_symlink_different_target(source: &Path, destination: &Path, args: Hook
     })?;
 
     if target == source {
-        return Err(HookError::Skipping("The destination path is already a symlink to the source path.".to_string()));
+        return Err(HookError::Skipping(format!("The destination path is already a symlink to the source path | Source: {} | Destination: {}", source.display(), destination.display())));
     }
 
     if !args.force && !args.interactive {
         return Err(HookError::FilesAlreadyExists);
     }
 
-    println!("The destination path is already a symlink, but with a different target.");
-    println!("Source: {}", source.display());
-    println!("Destination: {}", destination.display());
-    println!("Do you wish to overwrite the symlink? (y/n)");
-
-    let mut input = String::new();
-    Ok(loop {
-        match std::io::stdin().read_line(&mut input) {
-            Ok(_) => {
-                match input.trim() {
-                    "y" | "Y" => { // Overwrite
-                        remove_file(destination, args)?;
-                        break;
-                    },
-                    "n" | "N" => { // Cancel
-                        return Err(HookError::CancelledByUser);
-                    },
-                    _ => {
-                        println!("Invalid input. Please enter 'y' or 'n'.");
-                        input.clear();
-                    },
-                }
+    if args.interactive {
+        println!("The destination path is already a symlink, but with a different target.");
+        println!("Source: {}", source.display());
+        println!("Destination: {}", destination.display());
+        println!("Do you wish to overwrite the symlink target? (y/n)");
         
-            },
-            Err(err) => {
-                return Err(HookError::ExecutionError(format!("Error reading input: {}", err)));
-            },
+        let mut input = String::new();
+        
+        loop {
+            match std::io::stdin().read_line(&mut input) {
+                Ok(_) => {
+                    match input.trim() {
+                        "y" | "Y" => { // Overwrite
+                            remove_file(destination, args)?;
+                            break;
+                        },
+                        "n" | "N" => { // Cancel
+                            return Err(HookError::CancelledByUser);
+                        },
+                        _ => {
+                            println!("Invalid input. Please enter 'y' or 'n'.");
+                            input.clear();
+                        },
+                    }
+                },
+                Err(err) => {
+                    return Err(HookError::ExecutionError(format!("Error reading input: {}", err)));
+                },
+            }
         }
-    })
+    } else {
+        // args.force is always true here
+        remove_file(destination, args)?;
+    }
+    
+    Ok(())
 }
