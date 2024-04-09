@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-
-
 pub enum HookError {
     ExecutionError(String),
     SymlinkCreationError(std::io::Error),
