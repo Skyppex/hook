@@ -18,9 +18,6 @@ pub fn run() -> Result<(), HookError> {
         HookError::ExecutionError(format!("Error getting source path: {}", err))
     })?;
 
-    let force = args.force;
-    let quiet = args.quiet;
-
     if source.file_name() != destination.file_name() {
         return Err(HookError::DifferentNames);
     }
@@ -30,21 +27,21 @@ pub fn run() -> Result<(), HookError> {
             return Err(HookError::ExecutionError("The destination path must be a file if the source path is a file.".to_string()));
         }
         
-        create_symlink_file(source.as_path(), destination.as_path(), force, quiet)?;
+        create_symlink_file(source.as_path(), destination.as_path(), args.clone())?;
     } else {
         if destination.extension().is_some() {
             return Err(HookError::ExecutionError("The destination path must be a directory if the source path is a directory.".to_string()));
         }
 
-        create_symlink_directory(source.as_path(), destination.as_path(), force, quiet)?;
+        create_symlink_directory(source.as_path(), destination.as_path(), args)?;
     }
 
     Ok(())
 }
 
-fn create_symlink_file(source: &Path, destination: &Path, force: bool, quiet: bool) -> Result<(), HookError> {
+fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Result<(), HookError> {
     if destination.is_symlink() {
-        handle_symlink_different_target(source, destination, force, quiet)?;
+        handle_symlink_different_target(source, destination, args.clone())?;
     }
     
     assert!(source.extension().is_some());
@@ -52,64 +49,70 @@ fn create_symlink_file(source: &Path, destination: &Path, force: bool, quiet: bo
 
     match (destination.exists(), source.exists()) {
         (false, true) => {
-            create_symlink_file_op(source, destination, quiet)
+            create_symlink_file_op(source, destination, args.clone())
         },
         (true, false) => {
-            move_file(destination, source, quiet)?;
-            create_symlink_file_op(source, destination, quiet)
+            move_file(destination, source, args.clone())?;
+            create_symlink_file_op(source, destination, args.clone())
         },
         (true, true) => {
-            if !force {
+            if !args.force && !args.interactive {
                 return Err(HookError::FilesAlreadyExists);
             }
 
-            println!("The source and destination paths both exist.");
-            println!("Source: {}", source.display());
-            println!("Destination: {}", destination.display());
-            println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
+            if args.interactive {
+                println!("The source and destination paths both exist.");
+                println!("Source: {}", source.display());
+                println!("Destination: {}", destination.display());
+                println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
 
-            let mut input = String::new();
-            loop {
-                match std::io::stdin().read_line(&mut input) {
-                    Ok(_) => {
-                        match input.trim() {
-                            "s" | "S" => { // Keeping source
-                                remove_file(destination, quiet)?;
-                                break;
-                            },
-                            "d" | "D" => { // Keeping destination
-                                remove_file(source, quiet)?;
-                                move_file(destination, source, quiet)?;
-                                break;
-                            },
-                            "n" | "N" => { // Cancel
-                                return Err(HookError::CancelledByUser);
-                            },
-                            _ => {
-                                println!("Invalid input. Please enter 's', 'd', or 'n'.");
-                                input.clear();
-                            },
-                        }
-                    
-                    },
-                    Err(err) => {
-                        return Err(HookError::ExecutionError(format!("Error reading input: {}", err)));
-                    },
+                let mut input = String::new();
+
+                loop {
+                    match std::io::stdin().read_line(&mut input) {
+                        Ok(_) => {
+                            match input.trim() {
+                                "s" | "S" => { // Keeping source
+                                    remove_file(destination, args.clone())?;
+                                    break;
+                                },
+                                "d" | "D" => { // Keeping destination
+                                    remove_file(source, args.clone())?;
+                                    move_file(destination, source, args.clone())?;
+                                    break;
+                                },
+                                "n" | "N" => { // Cancel
+                                    return Err(HookError::CancelledByUser);
+                                },
+                                _ => {
+                                    println!("Invalid input. Please enter 's', 'd', or 'n'.");
+                                    input.clear();
+                                },
+                            }
+                        
+                        },
+                        Err(err) => {
+                            return Err(HookError::ExecutionError(format!("Error reading input: {}", err)));
+                        },
+                    }
                 }
+            } else {
+                // args.force is always true here
+                remove_file(destination, args.clone())?;
             }
 
-            create_symlink_file_op(source, destination, quiet)
+            create_symlink_file_op(source, destination, args)
         },
         (false, false) => {
-            create_file(source, quiet)?;
-            create_symlink_file_op(source, destination, quiet)
+            create_file(source, args.clone())?;
+            create_symlink_file_op(source, destination, args)
         },
     }
 }
 
-fn create_symlink_directory(source: &Path, destination: &Path, force: bool, quiet: bool) -> Result<(), HookError> {
+fn create_symlink_directory(source: &Path, destination: &Path, args: HookArgs) -> Result<(), HookError> {
     if destination.is_symlink() {
-        handle_symlink_different_target(source, destination, force, quiet)?;
+        handle_symlink_different_target(source, destination, args.clone())?;
     }
 
     assert!(source.extension().is_none());
@@ -117,71 +120,76 @@ fn create_symlink_directory(source: &Path, destination: &Path, force: bool, quie
 
     match (destination.exists(), source.exists()) {
         (false, true) => {
-            create_symlink_directory_op(source, destination, quiet)
+            create_symlink_directory_op(source, destination, args)
         },
         (true, false) => {
-            move_directory(destination, source, quiet)?;
-            create_symlink_directory_op(source, destination, quiet)
+            move_directory(destination, source, args.clone())?;
+            create_symlink_directory_op(source, destination, args)
         },
         (true, true) => {
             if is_dir_empty(destination) {
-                remove_directory(destination, quiet)?;
-                return create_symlink_directory(source, destination, force, quiet);
+                remove_directory(destination, args.clone())?;
+                return create_symlink_directory(source, destination, args);
             } else if is_dir_empty(source) {
-                remove_directory(source, quiet)?;
-                return create_symlink_directory(source, destination, force, quiet);
+                remove_directory(source, args.clone())?;
+                return create_symlink_directory(source, destination, args);
             }
 
-            if !force {
+            if !args.force && !args.interactive {
                 return Err(HookError::FilesAlreadyExists);
             }
 
-            println!("The source and destination paths both exist and have files in them.");
-            println!("Source: {}", source.display());
-            println!("Destination: {}", destination.display());
-            println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
+            if args.interactive {
+                println!("The source and destination paths both exist and have files in them.");
+                println!("Source: {}", source.display());
+                println!("Destination: {}", destination.display());
+                println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
 
-            let mut input = String::new();
-            loop {
-                match std::io::stdin().read_line(&mut input) {
-                    Ok(_) => {
-                        match input.trim() {
-                            "s" | "S" => { // Keeping source
-                                remove_directory(destination, quiet)?;
-                                break;
-                            },
-                            "d" | "D" => { // Keeping destination
-                                remove_directory(source, quiet)?;
-                                move_directory(destination, source, quiet)?;
-                                break;
-                            },
-                            "n" | "N" => { // Cancel
-                                return Err(HookError::CancelledByUser);
-                            },
-                            _ => {
-                                println!("Invalid input. Please enter 's', 'd', or 'n'.");
-                                input.clear();
-                            },
-                        }
-                    
-                    },
-                    Err(err) => {
-                        println!("Error reading input: {}", err);
-                    },
+                let mut input = String::new();
+                loop {
+                    match std::io::stdin().read_line(&mut input) {
+                        Ok(_) => {
+                            match input.trim() {
+                                "s" | "S" => { // Keeping source
+                                    remove_directory(destination, args.clone())?;
+                                    break;
+                                },
+                                "d" | "D" => { // Keeping destination
+                                    remove_directory(source, args.clone())?;
+                                    move_directory(destination, source, args.clone())?;
+                                    break;
+                                },
+                                "n" | "N" => { // Cancel
+                                    return Err(HookError::CancelledByUser);
+                                },
+                                _ => {
+                                    println!("Invalid input. Please enter 's', 'd', or 'n'.");
+                                    input.clear();
+                                },
+                            }
+                        
+                        },
+                        Err(err) => {
+                            println!("Error reading input: {}", err);
+                        },
+                    }
                 }
+            } else {
+                // args.force is always true here
+                remove_directory(destination, args.clone())?;
             }
 
-            create_symlink_directory_op(source, destination, quiet)
+            create_symlink_directory_op(source, destination, args)
         },
         (false, false) => {
-            create_directory(source, quiet)?;
-            create_symlink_directory_op(source, destination, quiet)
+            create_directory(source, args.clone())?;
+            create_symlink_directory_op(source, destination, args)
         },
     }
 }
 
-fn remove_file(path: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn remove_file(path: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Removing file: {}", path.display());
     }
 
@@ -190,8 +198,8 @@ fn remove_file(path: &Path, quiet: bool) -> Result<(), HookError> {
     })
 }
 
-fn remove_directory(path: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn remove_directory(path: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Removing directory: {}", path.display());
     }
 
@@ -200,8 +208,8 @@ fn remove_directory(path: &Path, quiet: bool) -> Result<(), HookError> {
     })
 }
 
-fn create_file(path: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn create_file(path: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Creating file: {}", path.display());
     }
 
@@ -210,8 +218,8 @@ fn create_file(path: &Path, quiet: bool) -> Result<(), HookError> {
     }).map(|_| ())
 }
 
-fn create_directory(path: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn create_directory(path: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Creating directory: {}", path.display());
     }
 
@@ -220,8 +228,8 @@ fn create_directory(path: &Path, quiet: bool) -> Result<(), HookError> {
     })
 }
 
-fn move_file(from: &Path, to: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn move_file(from: &Path, to: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Moving file: {} to {}", from.display(), to.display());
     }
 
@@ -230,8 +238,8 @@ fn move_file(from: &Path, to: &Path, quiet: bool) -> Result<(), HookError> {
     })
 }
 
-fn move_directory(from: &Path, to: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn move_directory(from: &Path, to: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Moving directory: {} to {}", from.display(), to.display());
     }
 
@@ -240,8 +248,8 @@ fn move_directory(from: &Path, to: &Path, quiet: bool) -> Result<(), HookError> 
     })
 }
 
-fn create_symlink_file_op(source: &Path, destination: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn create_symlink_file_op(source: &Path, destination: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Creating symlink: {} -> {}", source.display(), destination.display());
     }
 
@@ -250,8 +258,8 @@ fn create_symlink_file_op(source: &Path, destination: &Path, quiet: bool) -> Res
     })
 }
 
-fn create_symlink_directory_op(source: &Path, destination: &Path, quiet: bool) -> Result<(), HookError> {
-    if !quiet {
+fn create_symlink_directory_op(source: &Path, destination: &Path, args: HookArgs) -> Result<(), HookError> {
+    if !args.quiet {
         println!("Creating symlink: {} -> {}", source.display(), destination.display());
     }
 
@@ -267,7 +275,7 @@ fn is_dir_empty(path: &Path) -> bool {
     }
 }
 
-fn handle_symlink_different_target(source: &Path, destination: &Path, force: bool, quiet: bool) -> Result<(), HookError> {
+fn handle_symlink_different_target(source: &Path, destination: &Path, args: HookArgs) -> Result<(), HookError> {
     let target = destination.read_link().map_err(|err| {
         HookError::ExecutionError(format!("Error reading symlink: {}", err))
     })?;
@@ -276,7 +284,7 @@ fn handle_symlink_different_target(source: &Path, destination: &Path, force: boo
         return Err(HookError::Skipping("The destination path is already a symlink to the source path.".to_string()));
     }
 
-    if !force {
+    if !args.force && !args.interactive {
         return Err(HookError::FilesAlreadyExists);
     }
 
@@ -291,7 +299,7 @@ fn handle_symlink_different_target(source: &Path, destination: &Path, force: boo
             Ok(_) => {
                 match input.trim() {
                     "y" | "Y" => { // Overwrite
-                        remove_file(destination, quiet)?;
+                        remove_file(destination, args)?;
                         break;
                     },
                     "n" | "N" => { // Cancel
