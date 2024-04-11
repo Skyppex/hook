@@ -7,6 +7,9 @@ pub enum HookError {
     FilesAlreadyExists,
     DifferentNames,
     CancelledByUser,
+    
+    #[allow(dead_code)]
+    Debug(String),
 }
 
 impl Display for HookError {
@@ -16,8 +19,9 @@ impl Display for HookError {
             HookError::SymlinkCreationError(message) => write!(f, "Symlink creation error: {}", message),
             HookError::Skipping(message) => write!(f, "Skipping: {}", message),
             HookError::FilesAlreadyExists => write!(f, "The source and destination paths already have files and --force or --interactive is not passed."),
-            HookError::DifferentNames => write!(f, "The source and destination paths have different names."),
+            HookError::DifferentNames => write!(f, "The source and destination paths have different base names."),
             HookError::CancelledByUser => write!(f, "The operation was cancelled by the user."),
+            HookError::Debug(message) => write!(f, "Debug: {}", message),
         }
     }
 }

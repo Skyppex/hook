@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use symlink::{symlink_dir, symlink_file};
@@ -28,14 +28,63 @@ pub fn run() -> Result<(), HookError> {
     }
 
     if source.file_name() != destination.file_name() {
+        return handle_different_base_names(source, destination, args.clone());
+    }
+
+    check_valid_paths_and_create_symlink(source, destination, args)
+}
+
+fn handle_different_base_names(source: PathBuf, destination: PathBuf, args: HookArgs) -> Result<(), HookError> {
+    if args.force {
+        return check_valid_paths_and_create_symlink(source, destination, args);
+    }
+    if !args.interactive {
         return Err(HookError::DifferentNames);
     }
 
+    let expected_destination = destination.with_file_name(source.file_name().unwrap());
+
+    println!("Possible name error: The destination path does not have the same name as the source path.");
+    println!("Source: {}", source.display());
+    println!("Destination: {}", destination.display());
+    println!("Expected destination: {}", expected_destination.display());
+    println!("Which path did you mean to use? (d/e) OR (n) to cancel.");
+
+    let mut input = String::new();
+
+    loop {
+        match std::io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                match input.trim() {
+                    "d" | "D" => { // Using inputted destination
+                        return check_valid_paths_and_create_symlink(source, destination, args);
+                    },
+                    "e" | "E" => { // Using expected destination
+                        return check_valid_paths_and_create_symlink(source, expected_destination, args);
+                    },
+                    "n" | "N" => { // Cancel
+                        return Err(HookError::CancelledByUser);
+                    },
+                    _ => {
+                        println!("Invalid input. Please enter 'd', 'e', or 'n'.");
+                        input.clear();
+                    },
+                }
+        
+            },
+            Err(err) => {
+                return Err(HookError::ExecutionError(format!("Error reading input: {}", err)));
+            },
+        }
+    }
+}
+
+fn check_valid_paths_and_create_symlink(source: PathBuf, destination: PathBuf, args: HookArgs) -> Result<(), HookError> {
     if source.extension().is_some() {
         if destination.extension().is_none() {
             return Err(HookError::ExecutionError("The destination path must be a file if the source path is a file.".to_string()));
         }
-        
+    
         create_symlink_file(source.as_path(), destination.as_path(), args.clone())?;
     } else {
         if destination.extension().is_some() {
