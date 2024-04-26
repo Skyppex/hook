@@ -2,7 +2,7 @@ mod args;
 mod error;
 mod program;
 
-use std::{io::ErrorKind, path::PathBuf};
+use std::{io::{ErrorKind, Result}, path::{Path, PathBuf}};
 
 fn main() {
     let result = program::run();
@@ -12,16 +12,30 @@ fn main() {
     }
 }
 
-pub fn get_path(path: &str) -> Result<PathBuf, std::io::Error> {
+pub fn get_path(path: &str) -> Result<PathBuf>{
     let path = match path {
         p if p.starts_with("~") => {
             dirs::home_dir().ok_or(std::io::Error::from(ErrorKind::NotFound))?.join(&p[2..])
         },
+        p if p.starts_with("..") => {
+            let current_dir = &std::env::current_dir()?;
+            let mut current_dir = current_dir.parent()
+                    .ok_or(std::io::Error::from(ErrorKind::NotFound))?;
+            
+            let mut path = Path::new(&p[3..]);
+
+            while path.starts_with("..") {
+                current_dir = current_dir.parent()
+                    .ok_or(std::io::Error::from(ErrorKind::NotFound))?;
+                path = Path::new(&path.to_str().unwrap()[3..]);
+            }
+
+            current_dir.join(path)
+        },
         p if p.starts_with(".") => {
             std::env::current_dir()?.join(&p[2..])
         },
-        // 
-        p => std::env::current_dir()?.join(&p),
+        p => Path::new(&p).to_path_buf(),
     };
 
     Ok(path)
