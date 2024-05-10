@@ -5,7 +5,7 @@ use symlink::{symlink_dir, symlink_file};
 
 use crate::args::HookArgs;
 use crate::error::HookError;
-use crate::get_path;
+use crate::utils::get_path;
 
 pub fn run() -> Result<(), HookError> {
     let args = HookArgs::parse();
