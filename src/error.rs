@@ -7,7 +7,7 @@ pub enum HookError {
     FilesAlreadyExists,
     DifferentNames,
     CancelledByUser,
-    
+
     #[allow(dead_code)]
     Debug(String),
 }
@@ -25,3 +25,4 @@ impl Display for HookError {
         }
     }
 }
+
