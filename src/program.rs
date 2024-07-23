@@ -29,7 +29,13 @@ pub fn run() -> Result<(), HookError> {
         return handle_different_base_names(source, destination, args.clone());
     }
 
-    check_valid_paths_and_create_symlink(source, destination, args)
+    check_valid_paths_and_create_symlink(
+        source,
+        destination,
+        args,
+        create_symlink_file,
+        create_symlink_directory,
+    )
 }
 
 fn handle_different_base_names(
@@ -38,7 +44,13 @@ fn handle_different_base_names(
     args: HookArgs,
 ) -> Result<(), HookError> {
     if args.force {
-        return check_valid_paths_and_create_symlink(source, destination, args);
+        return check_valid_paths_and_create_symlink(
+            source,
+            destination,
+            args,
+            create_symlink_file,
+            create_symlink_directory,
+        );
     }
     if !args.interactive {
         return Err(HookError::DifferentNames);
@@ -62,7 +74,13 @@ fn handle_different_base_names(
                 match input.trim() {
                     "d" | "D" => {
                         // Using inputted destination
-                        return check_valid_paths_and_create_symlink(source, destination, args);
+                        return check_valid_paths_and_create_symlink(
+                            source,
+                            destination,
+                            args,
+                            create_symlink_file,
+                            create_symlink_directory,
+                        );
                     }
                     "e" | "E" => {
                         // Using expected destination
@@ -70,6 +88,8 @@ fn handle_different_base_names(
                             source,
                             expected_destination,
                             args,
+                            create_symlink_file,
+                            create_symlink_directory,
                         );
                     }
                     "n" | "N" => {
@@ -96,23 +116,16 @@ fn check_valid_paths_and_create_symlink(
     source: PathBuf,
     destination: PathBuf,
     args: HookArgs,
+    create_symlink_file: fn(&Path, &Path, HookArgs) -> Result<(), HookError>,
+    create_symlink_directory: fn(&Path, &Path, HookArgs) -> Result<(), HookError>,
 ) -> Result<(), HookError> {
-    if source.extension().is_some() {
-        if destination.extension().is_none() {
-            return Err(HookError::ExecutionError(
-                "The destination path must be a file if the source path is a file.".to_string(),
-            ));
-        }
+    let source_meta = source.metadata().map_err(|err| {
+        HookError::ExecutionError(format!("Error reading metadata for source path: {}", err))
+    })?;
 
+    if source_meta.is_file() {
         create_symlink_file(source.as_path(), destination.as_path(), args.clone())?;
     } else {
-        if destination.extension().is_some() {
-            return Err(HookError::ExecutionError(
-                "The destination path must be a directory if the source path is a directory."
-                    .to_string(),
-            ));
-        }
-
         create_symlink_directory(source.as_path(), destination.as_path(), args)?;
     }
 
@@ -131,9 +144,6 @@ fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Res
             destination.display()
         );
     }
-
-    assert!(source.extension().is_some());
-    assert!(destination.extension().is_some());
 
     match (destination.exists(), source.exists()) {
         (false, true) => create_symlink_file_op(source, destination, args.clone()),
@@ -217,9 +227,6 @@ fn create_symlink_directory(
             destination.display()
         );
     }
-
-    assert!(source.extension().is_none());
-    assert!(destination.extension().is_none());
 
     match (destination.exists(), source.exists()) {
         (false, true) => create_symlink_directory_op(source, destination, args),
@@ -443,4 +450,59 @@ fn handle_symlink_different_target(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, path::Path};
+
+    use crate::args::HookArgs;
+
+    #[test]
+    fn recognize_dotfile_as_file() {
+        let source = Path::new(".gitignore");
+        let destination = Path::new("C:\\Users\\user\\Documents\\gitignore");
+
+        let args = HookArgs {
+            source: source.to_str().unwrap().to_string(),
+            destination: destination.to_str().unwrap().to_string(),
+            force: false,
+            interactive: false,
+            verbose: false,
+            quiet: false,
+        };
+
+        thread_local! {
+            static MOCK_CALLED: RefCell<bool> = RefCell::new(false);
+        }
+
+        fn mock_create_symlink_file(
+            _: &Path,
+            _: &Path,
+            _: HookArgs,
+        ) -> Result<(), crate::error::HookError> {
+            MOCK_CALLED.with(|flag| {
+                *flag.borrow_mut() = true;
+            });
+            Ok(())
+        }
+
+        fn mock_create_symlink_directory(
+            _: &Path,
+            _: &Path,
+            _: HookArgs,
+        ) -> Result<(), crate::error::HookError> {
+            Ok(())
+        }
+
+        let _ = super::check_valid_paths_and_create_symlink(
+            source.to_path_buf(),
+            destination.to_path_buf(),
+            args,
+            mock_create_symlink_file,
+            mock_create_symlink_directory,
+        );
+
+        MOCK_CALLED.with(|flag| assert!(*flag.borrow()));
+    }
 }
