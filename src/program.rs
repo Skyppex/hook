@@ -119,11 +119,14 @@ fn check_valid_paths_and_create_symlink(
     create_symlink_file: fn(&Path, &Path, HookArgs) -> Result<(), HookError>,
     create_symlink_directory: fn(&Path, &Path, HookArgs) -> Result<(), HookError>,
 ) -> Result<(), HookError> {
-    let source_meta = source.metadata().map_err(|err| {
-        HookError::ExecutionError(format!("Error reading metadata for source path: {}", err))
-    })?;
+    let meta = source
+        .metadata()
+        .or(destination.metadata())
+        .map_err(|err| {
+            HookError::ExecutionError(format!("Error reading metadata for source path: {}", err))
+        })?;
 
-    if source_meta.is_file() {
+    if meta.is_file() {
         create_symlink_file(source.as_path(), destination.as_path(), args.clone())?;
     } else {
         create_symlink_directory(source.as_path(), destination.as_path(), args)?;
