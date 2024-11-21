@@ -3,5 +3,4 @@
 /target/CACHEDIR.TAG
 .idea
 
-/target/release/*
-!/target/release/hook.exe
+/target/release
