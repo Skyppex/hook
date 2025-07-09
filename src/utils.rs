@@ -1,36 +1,39 @@
-use std::{io::{ErrorKind, Result}, path::{Path, PathBuf}};
+use std::{
+    io::{ErrorKind, Result},
+    path::{Path, PathBuf},
+};
 
-pub fn get_path(path: &str) -> Result<PathBuf>{
+pub fn get_path(path: &str) -> Result<PathBuf> {
     let path = match path {
-        p if p.starts_with("~") => {
-            dirs::home_dir().ok_or(std::io::Error::from(ErrorKind::NotFound))?.join(&p[2..])
-        },
+        p if p.starts_with("~") => dirs::home_dir()
+            .ok_or(std::io::Error::from(ErrorKind::NotFound))?
+            .join(&p[2..]),
         p if p.starts_with("..") => {
             let current_dir = &std::env::current_dir()?;
-            let mut current_dir = current_dir.parent()
-                    .ok_or(std::io::Error::from(ErrorKind::NotFound))?;
-            
+            let mut current_dir = current_dir
+                .parent()
+                .ok_or(std::io::Error::from(ErrorKind::NotFound))?;
+
             let mut path = Path::new(&p[3..]);
 
             while path.starts_with("..") {
-                current_dir = current_dir.parent()
+                current_dir = current_dir
+                    .parent()
                     .ok_or(std::io::Error::from(ErrorKind::NotFound))?;
                 path = Path::new(&path.to_str().unwrap()[3..]);
             }
 
             current_dir.join(path)
-        },
-        p if p.starts_with("./") || p.starts_with(".\\") => {
-            std::env::current_dir()?.join(&p[2..])
-        },
+        }
+        p if p.starts_with("./") || p.starts_with(".\\") => std::env::current_dir()?.join(&p[2..]),
         p => {
             let path = Path::new(p);
             if !Path::has_root(path) {
-                return Ok(std::env::current_dir()?.join(&p))
+                return Ok(std::env::current_dir()?.join(&p));
             }
 
             path.to_path_buf()
-        },
+        }
     };
 
     Ok(path)
@@ -75,8 +78,11 @@ mod tests {
         let path = "..\\src".to_string();
         let binding = get_path(&path).unwrap();
         let full_path = binding.to_str().unwrap();
-        let binding = std::env::current_dir().unwrap()
-            .parent().unwrap().join("src");
+        let binding = std::env::current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("src");
         let expected = binding.to_str().unwrap();
         assert_eq!(full_path, expected);
     }
@@ -86,8 +92,13 @@ mod tests {
         let path = "..\\..\\src".to_string();
         let binding = get_path(&path).unwrap();
         let full_path = binding.to_str().unwrap();
-        let binding = std::env::current_dir().unwrap()
-            .parent().unwrap().parent().unwrap().join("src");
+        let binding = std::env::current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("src");
         let expected = binding.to_str().unwrap();
         assert_eq!(full_path, expected);
     }

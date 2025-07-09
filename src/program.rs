@@ -11,18 +11,18 @@ pub fn run() -> Result<(), HookError> {
     let args = HookArgs::parse();
 
     if args.verbose {
-        println!("Args: {:#?}", args);
+        eprintln!("Args: {:#?}", args);
     }
 
-    let source = get_path(&args.source.replace(r"\\", r"\"))
+    let source = get_path(&args.source.replace(r"\\", r"/").replace(r"\", "/"))
         .map_err(|err| HookError::ExecutionError(format!("Error getting source path: {}", err)))?;
 
-    let destination = get_path(&args.destination.replace(r"\\", r"\"))
+    let destination = get_path(&args.destination.replace(r"\\", r"/").replace(r"\", "/"))
         .map_err(|err| HookError::ExecutionError(format!("Error getting source path: {}", err)))?;
 
     if args.verbose {
-        println!("Source: {}", source.display());
-        println!("Destination: {}", destination.display());
+        eprintln!("Source: {}", source.display());
+        eprintln!("Destination: {}", destination.display());
     }
 
     if source.file_name() != destination.file_name() {
@@ -40,19 +40,20 @@ fn handle_different_base_names(
     if args.force {
         return check_valid_paths_and_create_symlink(source, destination, args);
     }
+
     if !args.interactive {
         return Err(HookError::DifferentNames);
     }
 
     let expected_destination = destination.with_file_name(source.file_name().unwrap());
 
-    println!(
+    eprintln!(
         "Possible name error: The destination path does not have the same name as the source path."
     );
-    println!("Source: {}", source.display());
-    println!("Destination: {}", destination.display());
-    println!("Expected destination: {}", expected_destination.display());
-    println!("Which path did you mean to use? (d/e) OR (n) to cancel.");
+    eprintln!("Source: {}", source.display());
+    eprintln!("Destination: {}", destination.display());
+    eprintln!("Expected destination: {}", expected_destination.display());
+    eprintln!("Which path did you mean to use? (d/e) OR (n) to cancel.");
 
     let mut input = String::new();
 
@@ -77,7 +78,7 @@ fn handle_different_base_names(
                         return Err(HookError::CancelledByUser);
                     }
                     _ => {
-                        println!("Invalid input. Please enter 'd', 'e', or 'n'.");
+                        eprintln!("Invalid input. Please enter 'd', 'e', or 'n'.");
                         input.clear();
                     }
                 }
@@ -129,7 +130,7 @@ fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Res
     }
 
     if args.verbose {
-        println!(
+        eprintln!(
             "Trying to create symlink file: {} -> {}",
             source.display(),
             destination.display()
@@ -148,10 +149,10 @@ fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Res
             }
 
             if args.interactive {
-                println!("The source and destination paths both exist.");
-                println!("Source: {}", source.display());
-                println!("Destination: {}", destination.display());
-                println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
+                eprintln!("The source and destination paths both exist.");
+                eprintln!("Source: {}", source.display());
+                eprintln!("Destination: {}", destination.display());
+                eprintln!("Which do you wish to keep? (s/d) OR (n) to cancel.");
 
                 let mut input = String::new();
 
@@ -175,7 +176,7 @@ fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Res
                                     return Err(HookError::CancelledByUser);
                                 }
                                 _ => {
-                                    println!("Invalid input. Please enter 's', 'd', or 'n'.");
+                                    eprintln!("Invalid input. Please enter 's', 'd', or 'n'.");
                                     input.clear();
                                 }
                             }
@@ -214,7 +215,7 @@ fn create_symlink_directory(
     }
 
     if args.verbose {
-        println!(
+        eprintln!(
             "Trying to create symlink directory: {} -> {}",
             source.display(),
             destination.display()
@@ -244,10 +245,10 @@ fn create_symlink_directory(
             }
 
             if args.interactive {
-                println!("The source and destination paths both exist and have files in them.");
-                println!("Source: {}", source.display());
-                println!("Destination: {}", destination.display());
-                println!("Which do you wish to keep? (s/d) OR (n) to cancel.");
+                eprintln!("The source and destination paths both exist and have files in them.");
+                eprintln!("Source: {}", source.display());
+                eprintln!("Destination: {}", destination.display());
+                eprintln!("Which do you wish to keep? (s/d) OR (n) to cancel.");
 
                 let mut input = String::new();
                 loop {
@@ -270,13 +271,13 @@ fn create_symlink_directory(
                                     return Err(HookError::CancelledByUser);
                                 }
                                 _ => {
-                                    println!("Invalid input. Please enter 's', 'd', or 'n'.");
+                                    eprintln!("Invalid input. Please enter 's', 'd', or 'n'.");
                                     input.clear();
                                 }
                             }
                         }
                         Err(err) => {
-                            println!("Error reading input: {}", err);
+                            eprintln!("Error reading input: {}", err);
                         }
                     }
                 }
@@ -296,7 +297,7 @@ fn create_symlink_directory(
 
 fn remove_file(path: &Path, args: HookArgs) -> Result<(), HookError> {
     if !args.quiet {
-        println!("Removing file: {}", path.display());
+        eprintln!("Removing file: {}", path.display());
     }
 
     std::fs::remove_file(path)
@@ -305,26 +306,16 @@ fn remove_file(path: &Path, args: HookArgs) -> Result<(), HookError> {
 
 fn remove_directory(path: &Path, args: HookArgs) -> Result<(), HookError> {
     if !args.quiet {
-        println!("Removing directory: {}", path.display());
+        eprintln!("Removing directory: {}", path.display());
     }
 
     std::fs::remove_dir_all(path)
         .map_err(|err| HookError::ExecutionError(format!("Error removing directory: {}", err)))
 }
 
-fn create_file(path: &Path, args: HookArgs) -> Result<(), HookError> {
-    if !args.quiet {
-        println!("Creating file: {}", path.display());
-    }
-
-    std::fs::File::create(path)
-        .map_err(|err| HookError::ExecutionError(format!("Error creating file: {}", err)))
-        .map(|_| ())
-}
-
 fn create_directory(path: &Path, args: HookArgs) -> Result<(), HookError> {
     if !args.quiet {
-        println!("Creating directory: {}", path.display());
+        eprintln!("Creating directory: {}", path.display());
     }
 
     std::fs::create_dir_all(path)
@@ -333,7 +324,7 @@ fn create_directory(path: &Path, args: HookArgs) -> Result<(), HookError> {
 
 fn move_file(from: &Path, to: &Path, args: HookArgs) -> Result<(), HookError> {
     if !args.quiet {
-        println!("Moving file: {} to {}", from.display(), to.display());
+        eprintln!("Moving file: {} to {}", from.display(), to.display());
     }
 
     std::fs::rename(from, to)
@@ -342,7 +333,7 @@ fn move_file(from: &Path, to: &Path, args: HookArgs) -> Result<(), HookError> {
 
 fn move_directory(from: &Path, to: &Path, args: HookArgs) -> Result<(), HookError> {
     if !args.quiet {
-        println!("Moving directory: {} to {}", from.display(), to.display());
+        eprintln!("Moving directory: {} to {}", from.display(), to.display());
     }
 
     std::fs::rename(from, to)
@@ -355,14 +346,41 @@ fn create_symlink_file_op(
     args: HookArgs,
 ) -> Result<(), HookError> {
     if !args.quiet {
-        println!(
+        eprintln!(
             "Creating symlink: {} -> {}",
             source.display(),
             destination.display()
         );
     }
 
-    symlink_file(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    if let Some(relative) = args.relative {
+        let relative = if let Some(relative) = relative {
+            get_path(&relative).map_err(|e| HookError::SymlinkCreationError(e))?
+        } else {
+            std::env::current_dir().map_err(|e| HookError::SymlinkCreationError(e))?
+        };
+
+        let source = source
+            .strip_prefix(&relative)
+            .map_err(|e| HookError::StripPrefixError {
+                inner: e,
+                prefix: relative.to_str().unwrap().to_string(),
+                full_path: source.to_str().unwrap().to_string(),
+            })?;
+
+        let destination =
+            destination
+                .strip_prefix(&relative)
+                .map_err(|e| HookError::StripPrefixError {
+                    inner: e,
+                    prefix: relative.to_str().unwrap().to_string(),
+                    full_path: destination.to_str().unwrap().to_string(),
+                })?;
+
+        symlink_file(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    } else {
+        symlink_file(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    }
 }
 
 fn create_symlink_directory_op(
@@ -371,14 +389,41 @@ fn create_symlink_directory_op(
     args: HookArgs,
 ) -> Result<(), HookError> {
     if !args.quiet {
-        println!(
+        eprintln!(
             "Creating symlink: {} -> {}",
             source.display(),
             destination.display()
         );
     }
 
-    symlink_dir(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    if let Some(relative) = args.relative {
+        let relative = if let Some(relative) = relative {
+            get_path(&relative).map_err(|e| HookError::SymlinkCreationError(e))?
+        } else {
+            std::env::current_dir().map_err(|e| HookError::SymlinkCreationError(e))?
+        };
+
+        let source = source
+            .strip_prefix(&relative)
+            .map_err(|e| HookError::StripPrefixError {
+                inner: e,
+                prefix: relative.to_str().unwrap().to_string(),
+                full_path: source.to_str().unwrap().to_string(),
+            })?;
+
+        let destination =
+            destination
+                .strip_prefix(&relative)
+                .map_err(|e| HookError::StripPrefixError {
+                    inner: e,
+                    prefix: relative.to_str().unwrap().to_string(),
+                    full_path: destination.to_str().unwrap().to_string(),
+                })?;
+
+        symlink_dir(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    } else {
+        symlink_dir(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    }
 }
 
 fn is_dir_empty(path: &Path) -> bool {
@@ -406,10 +451,10 @@ fn handle_symlink_different_target(
     }
 
     if args.interactive {
-        println!("The destination path is already a symlink, but with a different target.");
-        println!("Source: {}", source.display());
-        println!("Destination: {}", destination.display());
-        println!("Do you wish to overwrite the symlink target? (y/n)");
+        eprintln!("The destination path is already a symlink, but with a different target.");
+        eprintln!("Source: {}", source.display());
+        eprintln!("Destination: {}", destination.display());
+        eprintln!("Do you wish to overwrite the symlink target? (y/n)");
 
         let mut input = String::new();
 
@@ -427,7 +472,7 @@ fn handle_symlink_different_target(
                             return Err(HookError::CancelledByUser);
                         }
                         _ => {
-                            println!("Invalid input. Please enter 'y' or 'n'.");
+                            eprintln!("Invalid input. Please enter 'y' or 'n'.");
                             input.clear();
                         }
                     }

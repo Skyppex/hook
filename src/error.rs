@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, path::StripPrefixError};
 
 pub enum HookError {
     ExecutionError(String),
@@ -8,6 +8,11 @@ pub enum HookError {
     PathsDontExist,
     DifferentNames,
     CancelledByUser,
+    StripPrefixError {
+        inner: StripPrefixError,
+        prefix: String,
+        full_path: String,
+    },
 
     #[allow(dead_code)]
     Debug(String),
@@ -23,8 +28,8 @@ impl Display for HookError {
             HookError::PathsDontExist => write!(f, "The source and destination paths don't exist."),
             HookError::DifferentNames => write!(f, "The source and destination paths have different base names."),
             HookError::CancelledByUser => write!(f, "The operation was cancelled by the user."),
+            HookError::StripPrefixError { inner, prefix, full_path } => write!(f, "{} is not a prefix for {} | {}", prefix, full_path, inner),
             HookError::Debug(message) => write!(f, "Debug: {}", message),
         }
     }
 }
-
