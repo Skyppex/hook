@@ -23,6 +23,15 @@ pub fn run() -> Result<(), HookError> {
     if args.verbose {
         eprintln!("Source: {}", source.display());
         eprintln!("Destination: {}", destination.display());
+
+        if args.relative {
+            eprintln!(
+                "Relative destination: {}",
+                pathdiff::diff_paths(&source, &destination)
+                    .unwrap_or_else(|| PathBuf::from("N/A"))
+                    .display()
+            );
+        }
     }
 
     if source.file_name() != destination.file_name() {
@@ -106,6 +115,7 @@ fn check_valid_paths_and_create_symlink(
         .exists()
         .then(|| destination.metadata().unwrap().is_file());
 
+    dbg!(&source, &destination);
     match (source_is_file, destination_is_file) {
         (None, None) => Err(HookError::PathsDontExist),
         (Some(true), Some(false)) => Err(HookError::ExecutionError(
@@ -132,8 +142,8 @@ fn create_symlink_file(source: &Path, destination: &Path, args: HookArgs) -> Res
     if args.verbose {
         eprintln!(
             "Trying to create symlink file: {} -> {}",
+            destination.display(),
             source.display(),
-            destination.display()
         );
     }
 
@@ -217,8 +227,8 @@ fn create_symlink_directory(
     if args.verbose {
         eprintln!(
             "Trying to create symlink directory: {} -> {}",
+            destination.display(),
             source.display(),
-            destination.display()
         );
     }
 
@@ -345,42 +355,32 @@ fn create_symlink_file_op(
     destination: &Path,
     args: HookArgs,
 ) -> Result<(), HookError> {
+    let source = if args.relative {
+        let parent = destination.parent().ok_or_else(|| {
+            HookError::ExecutionError("Destination path has no parent".to_string())
+        })?;
+
+        &pathdiff::diff_paths(source, parent).ok_or_else(|| HookError::PathDiff {
+            source: source.to_path_buf(),
+            destination: destination.to_path_buf(),
+        })?
+    } else {
+        source
+    };
+
     if !args.quiet {
         eprintln!(
             "Creating symlink: {} -> {}",
+            destination.display(),
             source.display(),
-            destination.display()
         );
     }
 
-    if let Some(relative) = args.relative {
-        let relative = if let Some(relative) = relative {
-            get_path(&relative).map_err(|e| HookError::SymlinkCreationError(e))?
-        } else {
-            std::env::current_dir().map_err(|e| HookError::SymlinkCreationError(e))?
-        };
-
-        let source = source
-            .strip_prefix(&relative)
-            .map_err(|e| HookError::StripPrefixError {
-                inner: e,
-                prefix: relative.to_str().unwrap().to_string(),
-                full_path: source.to_str().unwrap().to_string(),
-            })?;
-
-        let destination =
-            destination
-                .strip_prefix(&relative)
-                .map_err(|e| HookError::StripPrefixError {
-                    inner: e,
-                    prefix: relative.to_str().unwrap().to_string(),
-                    full_path: destination.to_str().unwrap().to_string(),
-                })?;
-
-        symlink_file(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
-    } else {
-        symlink_file(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    if args.dry_run {
+        return Ok(());
     }
+
+    symlink_file(source, destination).map_err(HookError::SymlinkCreationError)
 }
 
 fn create_symlink_directory_op(
@@ -388,42 +388,32 @@ fn create_symlink_directory_op(
     destination: &Path,
     args: HookArgs,
 ) -> Result<(), HookError> {
+    let source = if args.relative {
+        let parent = destination.parent().ok_or_else(|| {
+            HookError::ExecutionError("Destination path has no parent".to_string())
+        })?;
+
+        &pathdiff::diff_paths(source, parent).ok_or_else(|| HookError::PathDiff {
+            source: source.to_path_buf(),
+            destination: destination.to_path_buf(),
+        })?
+    } else {
+        source
+    };
+
     if !args.quiet {
         eprintln!(
             "Creating symlink: {} -> {}",
+            destination.display(),
             source.display(),
-            destination.display()
         );
     }
 
-    if let Some(relative) = args.relative {
-        let relative = if let Some(relative) = relative {
-            get_path(&relative).map_err(|e| HookError::SymlinkCreationError(e))?
-        } else {
-            std::env::current_dir().map_err(|e| HookError::SymlinkCreationError(e))?
-        };
-
-        let source = source
-            .strip_prefix(&relative)
-            .map_err(|e| HookError::StripPrefixError {
-                inner: e,
-                prefix: relative.to_str().unwrap().to_string(),
-                full_path: source.to_str().unwrap().to_string(),
-            })?;
-
-        let destination =
-            destination
-                .strip_prefix(&relative)
-                .map_err(|e| HookError::StripPrefixError {
-                    inner: e,
-                    prefix: relative.to_str().unwrap().to_string(),
-                    full_path: destination.to_str().unwrap().to_string(),
-                })?;
-
-        symlink_dir(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
-    } else {
-        symlink_dir(source, destination).map_err(|err| HookError::SymlinkCreationError(err))
+    if args.dry_run {
+        return Ok(());
     }
+
+    symlink_dir(source, destination).map_err(HookError::SymlinkCreationError)
 }
 
 fn is_dir_empty(path: &Path) -> bool {

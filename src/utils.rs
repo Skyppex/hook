@@ -29,7 +29,7 @@ pub fn get_path(path: &str) -> Result<PathBuf> {
         p => {
             let path = Path::new(p);
             if !Path::has_root(path) {
-                return Ok(std::env::current_dir()?.join(&p));
+                return Ok(std::env::current_dir()?.join(p));
             }
 
             path.to_path_buf()

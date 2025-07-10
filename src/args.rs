@@ -14,9 +14,9 @@ pub struct HookArgs {
     #[arg(short, long, required = true)]
     pub destination: String,
 
-    /// Set symlinks as relative to a path. (default: current working directory)
+    /// Set symlinks as relative to the destination file.
     #[arg(short, long)]
-    pub relative: Option<Option<String>>,
+    pub relative: bool,
 
     /// When there is the possibility for data loss, ask the user for confirmation.
     #[arg(short, long, group = "overwrite")]
@@ -33,4 +33,8 @@ pub struct HookArgs {
     /// Print more information about the operation.
     #[arg(short, long, group = "logging")]
     pub verbose: bool,
+
+    /// Don't create symlinks, just print what would be done.
+    #[arg(long)]
+    pub dry_run: bool,
 }
