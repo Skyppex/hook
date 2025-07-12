@@ -115,7 +115,6 @@ fn check_valid_paths_and_create_symlink(
         .exists()
         .then(|| destination.metadata().unwrap().is_file());
 
-    dbg!(&source, &destination);
     match (source_is_file, destination_is_file) {
         (None, None) => Err(HookError::PathsDontExist),
         (Some(true), Some(false)) => Err(HookError::ExecutionError(
